@@ -27,9 +27,9 @@ type Logger interface {
 	Panicf(format string, v ...any)
 }
 
-// SetLogger is used to set the logger for error message.
+// InitLogger is used to set the logger for error message.
 // The initial logger is os.Stderr.
-func SetLogger(l Logger) error {
+func InitLogger(l Logger) error {
 	if l == nil {
 		return errors.New("logger is nil")
 	}

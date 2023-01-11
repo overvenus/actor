@@ -27,60 +27,66 @@ const (
 )
 
 var (
+	metricsNamespace = "actor"
+	metricsSubsystem = "actor"
+)
+
+var (
 	totalWorkers = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "number_of_workers",
 			Help:      "The total number of workers in an actor system.",
 		}, []string{"name"})
 	workingWorkers = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "number_of_working_workers",
 			Help:      "The number of working workers in an actor system.",
 		}, []string{"name"})
 	workingDuration = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "worker_cpu_seconds_total",
 			Help:      "Total user and system CPU time spent by workers in seconds.",
 		}, []string{"name", "id"})
 	batchSizeCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "batch_size_total",
 			Help:      "Total number of batch size of an actor system.",
 		}, []string{"name", "type"})
 	pollCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "poll_loop_total",
 			Help:      "Total number of poll loop count.",
 		}, []string{"name", "type"})
 	slowPollActorDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "slow_poll_duration_seconds",
 			Help:      "Bucketed histogram of actor poll time (s).",
 			Buckets:   prometheus.ExponentialBuckets(slowPollThreshold.Seconds(), 2, 16),
 		}, []string{"name"})
 	dropMsgCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "actor",
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubsystem,
 			Name:      "drop_message_total",
 			Help:      "The total number of dropped messages in an actor system.",
 		}, []string{"name"})
 )
 
-// InitMetrics registers all metrics in this file
-func InitMetrics(registry *prometheus.Registry) {
+// InitMetrics registers all metrics of the actor package.
+func InitMetrics(registry *prometheus.Registry, namespace, subsystem string) {
+	metricsNamespace, metricsSubsystem = namespace, subsystem
 	registry.MustRegister(totalWorkers)
 	registry.MustRegister(workingWorkers)
 	registry.MustRegister(workingDuration)
