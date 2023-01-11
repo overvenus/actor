@@ -17,13 +17,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
-}
 
 // Make sure Message can be printed in JSON format, so that it can be logged by
 // pingcap/log package.

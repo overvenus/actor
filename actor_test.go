@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/overvenus/actor/message"
 	"github.com/stretchr/testify/require"
 )
 

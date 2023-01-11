@@ -23,15 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/actor/message"
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/overvenus/actor/message"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
-}
 
 func makeTestSystem[T any](name string) (*System[T], *Router[T]) {
 	return NewSystemBuilder[T](name).
@@ -195,7 +190,7 @@ func TestActorSendReceive(t *testing.T) {
 	// Send to a non-existing actor.
 	id := ID(777)
 	err := router.Send(id, message.ValueMessage(0))
-	require.Equal(t, errActorNotFound, err)
+	require.Equal(t, ErrActorNotFound, err)
 
 	ch := make(chan message.Message[int], 1)
 	fa := &forwardActor[int]{
@@ -205,7 +200,7 @@ func TestActorSendReceive(t *testing.T) {
 
 	// The actor is not in router yet.
 	err = router.Send(id, message.ValueMessage(1))
-	require.Equal(t, errActorNotFound, err)
+	require.Equal(t, ErrActorNotFound, err)
 
 	// Spawn adds the actor to the router.
 	require.Nil(t, sys.Spawn(mb, fa))
@@ -601,7 +596,7 @@ func TestSendAfterClose(t *testing.T) {
 
 	// enqueue must return actor stopped error.
 	err := router.rd.enqueueLocked(p, false)
-	require.Equal(t, errActorStopped, err)
+	require.Equal(t, ErrActorStopped, err)
 
 	// Unblock enqueue.
 	sys.rd.Unlock()
@@ -670,15 +665,15 @@ func TestSendAfterMailboxClosed(t *testing.T) {
 	// so later Send and SendB always return actor stop.
 	require.Nil(t, router.Send(id, msg))
 	proc.onSystemStop()
-	require.EqualValues(t, errActorStopped, router.Send(id, msg))
-	require.EqualValues(t, errActorStopped, router.SendB(ctx, id, msg))
+	require.EqualValues(t, ErrActorStopped, router.Send(id, msg))
+	require.EqualValues(t, ErrActorStopped, router.SendB(ctx, id, msg))
 	wait(t, func() {
 		router.Broadcast(ctx, msg)
 	})
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/overvenus/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem[any](b.Name())
@@ -718,7 +713,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 }
 
 // Run the benchmark
-// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
+// go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/overvenus/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
 	sys, router := makeTestSystem[any](b.Name())

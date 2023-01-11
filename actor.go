@@ -15,13 +15,13 @@ package actor
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
-	"github.com/pingcap/tiflow/pkg/actor/message"
-	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/overvenus/actor/message"
 )
 
-var errMailboxFull = errors.ErrMailboxFull.FastGenByArgs()
+var errMailboxFull = errors.New("mailbox is full")
 
 // ID is ID for actors.
 type ID uint64
@@ -111,7 +111,7 @@ func (m *mailbox[T]) ID() ID {
 
 func (m *mailbox[T]) Send(msg message.Message[T]) error {
 	if atomic.LoadUint64(&m.state) == mailboxStateClosed {
-		return errActorStopped
+		return ErrActorStopped
 	}
 	select {
 	case m.msgCh <- msg:
@@ -126,7 +126,7 @@ func (m *mailbox[T]) SendB(ctx context.Context, msg message.Message[T]) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-m.closeCh:
-		return errActorStopped
+		return ErrActorStopped
 	case m.msgCh <- msg:
 		return nil
 	}

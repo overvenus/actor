@@ -19,6 +19,7 @@ package actor
 import (
 	"container/list"
 	"context"
+	"errors"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
@@ -26,11 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/actor/message"
-	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/overvenus/actor/message"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -44,8 +42,12 @@ const (
 )
 
 var (
-	errActorStopped  = errors.ErrActorStopped.FastGenByArgs()
-	errActorNotFound = errors.ErrActorNotFound.FastGenByArgs()
+	// ErrActorStopped means that an actor is in stopped state.
+	ErrActorStopped = errors.New("actor stopped")
+	// ErrActorNotFound means that an actor is not found.
+	ErrActorNotFound = errors.New("actor not found")
+	// ErrActorDuplicate means that an actor is already exist.
+	ErrActorDuplicate = errors.New("duplicated actor")
 )
 
 // procState is the state of a proc.
@@ -181,7 +183,7 @@ func (rd *ready[T]) stop() {
 // polled again.
 func (rd *ready[T]) enqueueLocked(p *proc[T], force bool) error {
 	if p.isClosed() {
-		return errActorStopped
+		return ErrActorStopped
 	}
 	id := p.mb.ID()
 	if _, ok := rd.procs[id]; !ok || force {
@@ -259,7 +261,7 @@ func NewRouter[T any](name string) *Router[T] {
 func (r *Router[T]) Send(id ID, msg message.Message[T]) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
-		return errActorNotFound
+		return ErrActorNotFound
 	}
 	p := value.(*proc[T])
 	err := p.mb.Send(msg)
@@ -275,7 +277,7 @@ func (r *Router[T]) Send(id ID, msg message.Message[T]) error {
 func (r *Router[T]) SendB(ctx context.Context, id ID, msg message.Message[T]) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
-		return errActorNotFound
+		return ErrActorNotFound
 	}
 	p := value.(*proc[T])
 	err := p.mb.SendB(ctx, msg)
@@ -293,9 +295,8 @@ func (r *Router[T]) Broadcast(ctx context.Context, msg message.Message[T]) {
 	r.procs.Range(func(key, value interface{}) bool {
 		p := value.(*proc[T])
 		if err := p.mb.SendB(ctx, msg); err != nil {
-			log.Warn("failed to send to message",
-				zap.Error(err), zap.Uint64("id", uint64(p.mb.ID())),
-				zap.Reflect("msg", msg))
+			logger.Printf(
+				"failed to send to message, ID: %d, error: %s", p.mb.ID(), err)
 			// Skip schedule the proc.
 			return true
 		}
@@ -315,7 +316,7 @@ func (r *Router[T]) Broadcast(ctx context.Context, msg message.Message[T]) {
 func (r *Router[T]) insert(id ID, p *proc[T]) error {
 	_, exist := r.procs.LoadOrStore(id, p)
 	if exist {
-		return errors.ErrActorDuplicate.FastGenByArgs()
+		return ErrActorDuplicate
 	}
 	return nil
 }
@@ -551,7 +552,7 @@ func (s *System[T]) poll(ctx context.Context, id int) {
 			closed := p.isClosed()
 			if closed {
 				s.handleFatal(
-					"closed actor can never receive new messages again",
+					"closed actor can never receive new messages again. ID: %d",
 					p.mb.ID())
 			}
 
@@ -575,10 +576,9 @@ func (s *System[T]) poll(ctx context.Context, id int) {
 				// Prometheus histogram is expensive, we only record slow poll.
 				s.metricSlowPollDuration.Observe(actorPollDuration.Seconds())
 				if actorPollDuration > 10*slowPollThreshold { // 1s
-					log.Warn("actor poll received messages too slow",
-						zap.Duration("duration", actorPollDuration),
-						zap.Uint64("id", uint64(p.mb.ID())),
-						zap.String("name", s.name))
+					logger.Printf(
+						"actor poll received messages too slow, ID: %d, name: %s, duration: %s",
+						p.mb.ID(), s.name, actorPollDuration)
 				}
 			}
 		}
@@ -605,7 +605,7 @@ func (s *System[T]) poll(ctx context.Context, id int) {
 				present := s.router.remove(p.mb.ID())
 				if !present {
 					s.handleFatal(
-						"try to remove non-existent actor", p.mb.ID())
+						"try to remove non-existent actor, ID %d", p.mb.ID())
 				}
 
 				// Drop all remaining messages.
@@ -627,5 +627,5 @@ func (s *System[T]) handleFatal(msg string, id ID) {
 }
 
 func defaultFatalHandler(msg string, id ID) {
-	log.Panic(msg, zap.Uint64("id", uint64(id)))
+	logger.Panicf(msg, id)
 }
