@@ -13,7 +13,10 @@
 
 package actor
 
-import "container/list"
+import (
+	"container/list"
+	"sync"
+)
 
 type chunk[T any] struct {
 	buffer []T
@@ -25,6 +28,10 @@ func newChunk[T any](cap int) *chunk[T] {
 	return &chunk[T]{
 		buffer: make([]T, cap),
 	}
+}
+
+func (c *chunk[T]) reset() {
+	c.front, c.back = 0, 0
 }
 
 func (c *chunk[T]) isDrained() bool {
@@ -52,6 +59,7 @@ func (c *chunk[T]) pop() (T, bool) {
 }
 
 type chunkQ[T any] struct {
+	cache    *sync.Pool
 	queue    *list.List
 	chunkCap int
 	len      int
@@ -59,6 +67,9 @@ type chunkQ[T any] struct {
 
 func newChunkQ[T any](chunkCap int) *chunkQ[T] {
 	return &chunkQ[T]{
+		cache: &sync.Pool{New: func() any {
+			return newChunk[T](chunkCap)
+		}},
 		queue:    list.New(),
 		chunkCap: chunkCap,
 	}
@@ -70,11 +81,11 @@ func (q *chunkQ[T]) Len() int {
 
 func (q *chunkQ[T]) PushBack(v T) {
 	if q.queue.Back() == nil {
-		q.queue.PushBack(newChunk[T](q.chunkCap))
+		q.queue.PushBack(q.cache.Get())
 	}
 	ok := q.queue.Back().Value.(*chunk[T]).push(v)
 	if !ok {
-		chunk := newChunk[T](q.chunkCap)
+		chunk := q.cache.Get().(*chunk[T])
 		chunk.push(v)
 		q.queue.PushBack(chunk)
 	}
@@ -89,6 +100,9 @@ func (q *chunkQ[T]) PopFront() (T, bool) {
 			if chunk.isDrained() {
 				// Only remove chunk when all its buffer was used.
 				q.queue.Remove(front)
+				// Recycle chunk to save memory allocation.
+				chunk.reset()
+				q.cache.Put(chunk)
 				continue
 			}
 			// The chunk is no drained, it can be used in later push.

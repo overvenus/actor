@@ -141,7 +141,7 @@ func BenchmarkQueue(b *testing.B) {
 }
 
 func benchmarkQueue(b *testing.B, push, pushPop func(int)) {
-	for item := 32; item <= 256; item = item * 2 {
+	for item := 32; item <= 1024; item = item * 2 {
 		b.Run(fmt.Sprintf("push_%d_item", item), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
