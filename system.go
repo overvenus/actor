@@ -17,7 +17,6 @@
 package actor
 
 import (
-	"container/list"
 	"context"
 	"errors"
 	"runtime"
@@ -39,6 +38,8 @@ const (
 	DefaultActorBatchSize = 1
 	// DefaultMsgBatchSizePerActor is the default size of receive message batch.
 	DefaultMsgBatchSizePerActor = 64
+	// defaultRouterChunkCap is the default router chunk cap.
+	defaultRouterChunkCap = 128
 )
 
 var (
@@ -155,7 +156,7 @@ type ready[T any] struct {
 
 	// TODO: replace with a memory efficient queue,
 	// e.g., an array based queue to save allocation.
-	queue list.List
+	queue *chunkQ[*proc[T]]
 	// In the set, an actor is either polling by system
 	// or is pending to be polled.
 	procs map[ID]struct{}
@@ -222,13 +223,11 @@ func (rd *ready[T]) batchReceiveProcs(batchP []*proc[T]) int {
 	n := 0
 	max := len(batchP)
 	for i := 0; i < max; i++ {
-		if rd.queue.Len() == 0 {
+		p, ok := rd.queue.PopFront()
+		if !ok {
 			// Stop receive if there is no more ready procs.
 			break
 		}
-		element := rd.queue.Front()
-		rd.queue.Remove(element)
-		p := element.Value.(*proc[T])
 		batchP[i] = p
 		n++
 	}
@@ -243,14 +242,14 @@ type Router[T any] struct {
 	procs sync.Map
 }
 
-// NewRouter returns a new router.
-func NewRouter[T any](name string) *Router[T] {
+// newRouter returns a new router.
+func newRouter[T any](name string, chunkCap int) *Router[T] {
 	r := &Router[T]{
 		rd: &ready[T]{},
 	}
 	r.rd.cond = sync.NewCond(&r.rd.Mutex)
 	r.rd.procs = make(map[ID]struct{})
-	r.rd.queue.Init()
+	r.rd.queue = newChunkQ[*proc[T]](chunkCap)
 	r.rd.metricDropMessage = dropMsgCount.WithLabelValues(name)
 	return r
 }
@@ -332,6 +331,7 @@ type SystemBuilder[T any] struct {
 	numWorker            int
 	actorBatchSize       int
 	msgBatchSizePerActor int
+	routerChunkCap       int
 
 	fatalHandler func(string, ID)
 }
@@ -349,6 +349,7 @@ func NewSystemBuilder[T any](name string) *SystemBuilder[T] {
 		numWorker:            defaultWorkerNum,
 		actorBatchSize:       DefaultActorBatchSize,
 		msgBatchSizePerActor: DefaultMsgBatchSizePerActor,
+		routerChunkCap:       defaultRouterChunkCap,
 	}
 }
 
@@ -379,6 +380,15 @@ func (b *SystemBuilder[T]) Throughput(
 	return b
 }
 
+// RouterChunkCap sets router's chunk capacity of a system.
+func (b *SystemBuilder[T]) RouterChunkCap(routerChunkCap int) *SystemBuilder[T] {
+	if routerChunkCap <= 0 {
+		routerChunkCap = defaultRouterChunkCap
+	}
+	b.routerChunkCap = routerChunkCap
+	return b
+}
+
 // handleFatal sets the fatal handler of a system.
 func (b *SystemBuilder[T]) handleFatal(
 	fatalHandler func(string, ID),
@@ -389,7 +399,7 @@ func (b *SystemBuilder[T]) handleFatal(
 
 // Build builds a system and a router.
 func (b *SystemBuilder[T]) Build() (*System[T], *Router[T]) {
-	router := NewRouter[T](b.name)
+	router := newRouter[T](b.name, b.routerChunkCap)
 	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
 	for i := range metricWorkingDurations {
 		metricWorkingDurations[i] = workingDuration.WithLabelValues(b.name, strconv.Itoa(i))

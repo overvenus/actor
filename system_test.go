@@ -59,6 +59,10 @@ func TestSystemBuilder(t *testing.T) {
 	b.Throughput(7, 8)
 	require.Equal(t, 7, b.actorBatchSize)
 	require.Equal(t, 8, b.msgBatchSizePerActor)
+
+	require.Equal(t, defaultRouterChunkCap, b.routerChunkCap)
+	b.RouterChunkCap(3)
+	require.Equal(t, 3, b.routerChunkCap)
 }
 
 func TestMailboxSendAndSendB(t *testing.T) {
@@ -93,7 +97,7 @@ func TestRouterSendAndSendB(t *testing.T) {
 	t.Parallel()
 	id := ID(0)
 	mb := NewMailbox[any](id, 1)
-	router := NewRouter[any](t.Name())
+	router := NewRouter4Test[any](t.Name())
 	err := router.insert(id, &proc[any]{mb: mb})
 	require.Nil(t, err)
 	err = router.Send(id, message.ValueMessage[any](nil))
@@ -651,7 +655,7 @@ func TestSendAfterMailboxClosed(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	router := NewRouter[any](t.Name())
+	router := NewRouter4Test[any](t.Name())
 
 	id := ID(1)
 	cap := 1

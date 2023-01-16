@@ -13,6 +13,11 @@
 
 package actor
 
+// NewRouter4Test returns a new router. Test only.
+func NewRouter4Test[T any](name string) *Router[T] {
+	return newRouter[T](name, defaultRouterChunkCap)
+}
+
 // InsertMailbox4Test add a mailbox into router. Test only.
 func (r *Router[T]) InsertMailbox4Test(id ID, mb Mailbox[T]) {
 	r.procs.Store(id, &proc[T]{mb: mb})
